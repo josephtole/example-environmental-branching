@@ -1,0 +1,112 @@
+---
+name: CD
+
+on:
+  push:
+
+jobs:
+  cd:
+    name: Continuous Delivery
+    runs-on: ubuntu-22.04
+    if: github.ref_protected
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version
+        id: version
+        uses: reecetech/version-increment@2023.10.2
+
+      # We need a variable that is true/false depending on if the branch is not the default branch
+      - name: Create variable for non default branch
+        run: |
+          if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]
+          then
+            echo "is_not_default_branch=false" >> $GITHUB_ENV
+          else
+            echo "is_not_default_branch=true" >> $GITHUB_ENV
+          fi
+
+      - name: Create container metadata (default branch)
+        id: docker-metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+          tags: |
+            ## Default branch
+            # v1
+            type=raw,value=${{ steps.version.outputs.major-v-version }},priority=880,enable={{is_default_branch}}
+
+            # v1.2
+            type=raw,value=${{ steps.version.outputs.major-v-version }}.${{ steps.version.outputs.minor-version }},priority=860,enable={{is_default_branch}}
+
+            # v1.2.3
+            type=raw,value=${{ steps.version.outputs.v-version }},priority=840,enable={{is_default_branch}}
+
+            # latest
+            type=raw,value=latest,enable={{is_default_branch}}
+
+            ## Non default branch
+            # v1-dev
+            type=raw,value=${{ steps.version.outputs.major-v-version }}-${{ github.ref_name }},priority=780,enable=${{ env.is_not_default_branch }}
+
+            # v1.2-qa
+            type=raw,value=${{ steps.version.outputs.major-v-version }}.${{ steps.version.outputs.minor-version }}-${{ github.ref_name }},priority=760,enable=${{ env.is_not_default_branch }}
+
+            # v1.2.3-pre.24f0ee3-qa
+            type=raw,value=${{ steps.version.outputs.v-version }}-${{ github.ref_name }},priority=740,enable=${{ env.is_not_default_branch }}
+
+            # staging
+            type=raw,value=latest-${{ github.ref_name }},priority=990,enable=${{ env.is_not_default_branch }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image to registry
+        uses: docker/build-push-action@v5
+        with:
+          context: "{{ defaultContext }}:webserver"
+          file: Containerfile
+          push: true
+          load: false
+          labels: ${{ steps.docker-metadata.outputs.labels }}
+          tags: ${{ steps.docker-metadata.outputs.tags }}
+
+      - name: Push tags
+        run: |
+          if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]
+          then
+            git tag -f "${{ steps.version.outputs.major-v-version }}"
+            git tag -f "${{ steps.version.outputs.major-v-version }}.${{ steps.version.outputs.minor-version }}"
+            git tag -f "${{ steps.version.outputs.v-version }}"
+            git tag -f "latest"
+          else
+            git tag -f "${{ steps.version.outputs.major-v-version }}-${{ github.ref_name }}"
+            git tag -f "${{ steps.version.outputs.major-v-version }}.${{ steps.version.outputs.minor-version }}-${{ github.ref_name }}"
+            git tag -f "${{ steps.version.outputs.v-version }}-${{ github.ref_name }}"
+            git tag -f "latest-${{ github.ref_name }}"
+          fi
+
+          git push -f --tags
+
+      - name: Determine image name to deploy
+        run: |
+          if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]
+          then
+            echo "image_name=${{ steps.version.outputs.v-version }}" >> $GITHUB_ENV
+            echo "image_uri=ghcr.io/${{ github.repository }}:${{ steps.version.outputs.v-version }}" >> $GITHUB_ENV
+          else
+            echo "image_name=${{ steps.version.outputs.v-version }}-${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "image_uri=ghcr.io/${{ github.repository }}:${{ steps.version.outputs.v-version }}-${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Verify image URI
+        run: docker manifest inspect "${{ env.image_uri }}"
+
+      - name: Deploy container
+        run: echo '[MOCK] Deploying container from image ${{ env.image_name }} (${{ env.image_uri }}) to ${{ github.ref_name }} environment...'

@@ -1,0 +1,14 @@
+---
+name: Testing
+
+on:
+  pull_request:
+
+jobs:
+  testing:
+    name: Testing image
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Test software
+        run: echo "[MOCK] Performing testing..."

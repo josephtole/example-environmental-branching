@@ -1,0 +1,4 @@
+dev
+qa
+staging
+prod

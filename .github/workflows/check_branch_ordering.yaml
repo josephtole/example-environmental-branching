@@ -1,0 +1,23 @@
+---
+name: Verify branch ordering in PR
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+jobs:
+  testing:
+    name: Verify branch ordering
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run check-branch-ordering.sh
+        working-directory: scripts/continuous-delivery
+        run: ./check-branch-ordering.sh
