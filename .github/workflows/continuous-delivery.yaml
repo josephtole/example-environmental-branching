@@ -109,4 +109,6 @@ jobs:
         run: docker manifest inspect "${{ env.image_uri }}"
 
       - name: Deploy container
-        run: echo '[MOCK] Deploying container from image ${{ env.image_name }} (${{ env.image_uri }}) to ${{ github.ref_name }} environment...'
+        run: |
+          echo '[MOCK] Deploying container from image ${{ env.image_name }} (${{ env.image_uri }}) to ${{ github.ref_name }} environment'
+          echo '::notice title=Deploying container to ${{ github.ref_name }} environment::Deploying container from image ${{ env.image_name }} (${{ env.image_uri }}) to ${{ github.ref_name }} environment'
